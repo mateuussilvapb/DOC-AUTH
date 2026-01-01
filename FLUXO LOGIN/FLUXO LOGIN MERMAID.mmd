@@ -1,0 +1,32 @@
+flowchart TD
+    A[Usuário acessa o Sistema Cliente] --> B{Usuário autenticado?}
+
+    B -- Não --> C[Redireciona para Auth /authorize<br/>com client_id do sistema]
+    B -- Sim --> Z[Acesso liberado ao sistema]
+
+    C --> D[Tela de Login do Auth]
+    D --> E[Usuário informa<br/>login e senha]
+    E --> F{Credenciais válidas?}
+
+    F -- Não --> G[Exibe mensagem:<br/>Usuário ou senha inválidos]
+    G --> D            
+
+    F -- Sim --> H{Usuário é Master?}
+
+    H -- Sim --> I[Autenticação aprovada]
+    H -- Não --> J{Usuário possui vínculo<br/>com o sistema?}
+
+    J -- Não --> K[Exibe mensagem:<br/>Acesso não permitido ao sistema]
+    K --> D
+
+    J -- Sim --> I[Autenticação aprovada]
+
+    I --> L[Auth gera Authorization Code]
+    L --> M[Redireciona usuário<br/>para o sistema cliente<br/>com o code]
+
+    M --> N[Sistema Cliente recebe o code]
+    N --> O[Sistema Cliente troca code<br/>por JWT no Auth]
+
+    O --> P[Auth valida o code<br/>e emite JWT]
+    P --> Q[Sistema Cliente armazena o token]
+    Q --> Z[Acesso liberado ao sistema]

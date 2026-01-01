@@ -13,93 +13,146 @@
 
 ### 2.1 Usuário (`user`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| username | String |
-| email | String |
-| password_hash | String |
-| name | String |
-| is_master | Boolean |
-| status | Enum |
-| created_at | Timestamp |
-| updated_at | Timestamp |
+Representa a identidade do usuário no domínio do Auth Server.
+
+| Campo         | Tipo        | Observações                  |
+| ------------- | ----------- | ---------------------------- |
+| id            | UUID / Long | Identificador interno        |
+| username      | String      | Único                        |
+| email         | String      | Único                        |
+| password_hash | String      | Hash seguro (BCrypt, Argon2) |
+| name          | String      | Nome completo                |
+| is_master     | Boolean     | Usuário global               |
+| status        | Enum        | ACTIVE, BLOCKED, DISABLED    |
+| created_at    | Timestamp   | Auditoria                    |
+| updated_at    | Timestamp   | Auditoria                    |
+| created_by    | String      | Auditoria                    |
+
+**Observações arquiteturais:**
+
+- `is_master` impacta diretamente o fluxo de login
+- Usuário Master ignora vínculos
+- Nenhuma informação de sistema ou perfil fica aqui
 
 ---
 
 ### 2.2 Sistema Cliente (`client_system`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| client_id | String |
-| client_secret | String |
-| name | String |
-| redirect_uri | String |
-| status | Enum |
-| created_at | Timestamp |
-| updated_at | Timestamp |
+Representa um sistema que consome autenticação.
+
+| Campo         | Tipo        | Observações             |
+| ------------- | ----------- | ----------------------- |
+| id            | UUID / Long | Identificador interno   |
+| client_id     | String      | Público (OAuth2)        |
+| client_secret | String      | Apenas server-to-server |
+| name          | String      | Nome do sistema         |
+| redirect_uri  | String      | Validado no authorize   |
+| status        | Enum        | ACTIVE, INACTIVE        |
+| created_at    | Timestamp   | Auditoria               |
+| updated_at    | Timestamp   | Auditoria               |
+| created_by    | String      | Auditoria               |
+
+**Observações:**
+
+- `client_id` aparece no JWT (`aud`, `client_id`)
+- Pode suportar múltiplos `redirect_uris` futuramente
 
 ---
 
 ### 2.3 Perfil do Sistema (`system_role`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| system_id | FK → client_system |
-| code | String |
-| description | String |
-| created_at | Timestamp |
+Perfis de sistemas atribuíveis a usuários.
+
+| Campo       | Tipo                  | Observações                 |
+| ----------- | --------------------- | --------------------------- |
+| id          | UUID / Long           | Identificador interno       |
+| system_id   | FK → client_system    | Roles pertencem a sistemas  |
+| code        | String                | Ex: ADMIN, USER             |
+| description | String                | Texto explicativo           |
+| created_at  | Timestamp             | Auditoria                   |
+| created_by  | String                | Auditoria                   |
+
+**Observações:**
+
+- Entidade fraca (depende da existência de um sistema)
+- Não conhece permissões funcionais
+- Mapeamento para permissões ocorre nos sistemas clientes
 
 ---
 
 ### 2.4 Vínculo Usuário ↔ Sistema (`user_system`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| user_id | FK → user |
-| system_id | FK → client_system |
-| status | Enum |
-| created_at | Timestamp |
+Representa o acesso de um usuário a um sistema.
+
+| Campo      | Tipo               | Observações     |
+| ---------- | ------------------ | --------------- |
+| id         | UUID / Long        | Identificador   |
+| user_id    | FK → user          |                 |
+| system_id  | FK → client_system |                 |
+| status     | Enum               | ACTIVE, REVOKED |
+| created_at | Timestamp          | Auditoria       |
+| created_by | String             | Auditoria       |
+
+**Regras:**
+
+- Um usuário pode ter vários sistemas
+- Um sistema pode ter vários usuários
+- Usuário Master não precisa de registro aqui
 
 ---
 
 ### 2.5 Perfis do Usuário no Sistema (`user_system_role`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| user_system_id | FK → user_system |
-| system_role_id | FK → system_role |
+Associação N:N entre vínculo e perfis.
+
+| Campo          | Tipo             | Observações |
+| -------------- | ---------------- | ----------- |
+| id             | UUID / Long      |             |
+| user_system_id | FK → user_system |             |
+| system_role_id | FK → role        |             |
+
+**Resultado prático:**
+
+- Um usuário pode ter múltiplos perfis em um mesmo sistema
+- O JWT inclui essa informação (system_roles)
 
 ---
 
 ### 2.6 Authorization Code (`authorization_code`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| code | String |
-| user_id | FK → user |
-| system_id | FK → client_system |
-| expires_at | Timestamp |
-| used | Boolean |
-| created_at | Timestamp |
+Utilizado no OAuth2 Authorization Code Flow.
+
+| Campo      | Tipo               | Observações             |
+| ---------- | ------------------ | ----------------------- |
+| id         | UUID / Long        |                         |
+| code       | String             | Valor enviado ao client |
+| user_id    | FK → user          |                         |
+| system_id  | FK → client_system |                         |
+| expires_at | Timestamp          | Curto (ex: 5 min)       |
+| used       | Boolean            | Uso único               |
+| created_at | Timestamp          |                         |
+
+**Observações:**
+
+- Nunca reutilizado
+- Apagável por job de limpeza
+- Não substitui token
 
 ---
 
 ### 2.7 Token de Recuperação de Senha (`password_reset_token`)
 
-| Campo | Tipo |
-|-----|-----|
-| id | UUID |
-| token | String |
-| user_id | FK → user |
-| expires_at | Timestamp |
-| used | Boolean |
-| created_at | Timestamp |
+Fluxo fora do login principal, mas necessário.
+
+| Campo      | Tipo        | Observações |
+| ---------- | ----------- | ----------- |
+| id         | UUID / Long |             |
+| token      | String      | Uso único   |
+| user_id    | FK → user   |             |
+| expires_at | Timestamp   |             |
+| used       | Boolean     |             |
+| created_at | Timestamp   |             |
+
 
 ---
 
@@ -114,11 +167,26 @@ USER
                                         └── CLIENT_SYSTEM
 ```
 
+```
+USER
+ └── AUTHORIZATION_CODE
+```
+
+```
+USER
+ └── PASSWORD_RESET_TOKEN
+```
 ---
 
 ## 4. Alinhamento com JWT
 
-- `user_id`, `username`, `email`, `name` → Usuário
-- `is_master` → Usuário
-- `client_id` → Sistema cliente
-- `system_roles` → Perfis do sistema solicitante
+| Claim JWT     | Origem no Modelo        |
+| ------------- | ----------------------- |
+| sub / user_id | user.id                 |
+| username      | user.username           |
+| email         | user.email              |
+| name          | user.name               |
+| is_master     | user.is_master          |
+| client_id     | client_system.client_id |
+| system_roles  | role.code (via vínculo) |
+
